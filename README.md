@@ -1,70 +1,168 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-P4 | ESP32-S2 | ESP32-S3 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- |
+# 🚁 Soil Sensor Deployment Mechanism Firmware (ESP32-C6)
 
-# Blink Example
+This firmware controls a **stepper-driven linear actuator** used to deploy and retract a soil sensor on a drone platform.
 
-(See the README.md file in the upper level 'examples' directory for more information about examples.)
+It interfaces with:
+- A **NEMA17 stepper motor**
+- **A4988 stepper driver**
+- **Limit switches** for motion boundaries
+- **GPIO-triggered inputs** for extend/retract commands
 
-This example demonstrates how to blink a LED by using the GPIO driver or using the [led_strip](https://components.espressif.com/component/espressif/led_strip) library if the LED is addressable e.g. [WS2812](https://cdn-shop.adafruit.com/datasheets/WS2812B.pdf). The `led_strip` library is installed via [component manager](main/idf_component.yml).
+---
 
-## How to Use Example
+## 📌 Features
 
-Before project configuration and build, be sure to set the correct chip target using `idf.py set-target <chip_name>`.
+- ✅ Extend / retract control via GPIO inputs  
+- ✅ Hardware limit switch protection  
+- ✅ Automatic motor stop at limits  
+- ✅ Driver sleep/disable to eliminate idle noise  
+- ✅ Watchdog-safe (FreeRTOS compliant)  
+- ✅ Simple and reliable design (no blocking starvation)
 
-### Hardware Required
+---
 
-* A development board with normal LED or addressable LED on-board (e.g., ESP32-S3-DevKitC, ESP32-C6-DevKitC etc.)
-* A USB cable for Power supply and programming
+## ⚙️ Hardware Overview
 
-See [Development Boards](https://www.espressif.com/en/products/devkits) for more information about it.
+### 🧠 Microcontroller
+- ESP32-C6
 
-### Configure the Project
+### ⚡ Motor Driver
+- A4988 Stepper Driver
 
-Open the project configuration menu (`idf.py menuconfig`).
+### 🔩 Actuation
+- NEMA17 Stepper Motor
+- Lead screw linear actuator
 
-In the `Example Configuration` menu:
+### 🔘 Inputs
+- 2x limit switches (top & bottom)
+- 2x GPIO trigger inputs (extend / retract)
 
-* Select the LED type in the `Blink LED type` option.
-  * Use `GPIO` for regular LED
-  * Use `LED strip` for addressable LED
-* If the LED type is `LED strip`, select the backend peripheral
-  * `RMT` is only available for ESP targets with RMT peripheral supported
-  * `SPI` is available for all ESP targets
-* Set the GPIO number used for the signal in the `Blink GPIO number` option.
-* Set the blinking period in the `Blink period in ms` option.
+---
 
-### Build and Flash
+## 🔌 Pin Configuration
 
-Run `idf.py -p PORT flash monitor` to build, flash and monitor the project.
+### Stepper Driver
 
-(To exit the serial monitor, type ``Ctrl-]``.)
+| Signal | ESP32 Pin |
+|--------|----------|
+| DIR    | GPIO8    |
+| STEP   | GPIO9    |
+| SLP/RST| GPIO14   |
+| EN     | GPIO15   |
+| VDD    | 3V3      |
+| GND    | GND      |
 
-See the [Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html) for full steps to configure and use ESP-IDF to build projects.
+### Limit Switches
 
-## Example Output
+| Function        | ESP32 Pin |
+|----------------|----------|
+| Bottom Limit   | GPIO6    |
+| Top Limit      | GPIO7    |
 
-As you run the example, you will see the LED blinking, according to the previously defined period. For the addressable LED, you can also change the LED color by setting the `led_strip_set_pixel(led_strip, 0, 16, 16, 16);` (LED Strip, Pixel Number, Red, Green, Blue) with values from 0 to 255 in the [source file](main/blink_example_main.c).
+### Control Inputs
 
-```text
-I (315) example: Example configured to blink addressable LED!
-I (325) example: Turning the LED OFF!
-I (1325) example: Turning the LED ON!
-I (2325) example: Turning the LED OFF!
-I (3325) example: Turning the LED ON!
-I (4325) example: Turning the LED OFF!
-I (5325) example: Turning the LED ON!
-I (6325) example: Turning the LED OFF!
-I (7325) example: Turning the LED ON!
-I (8325) example: Turning the LED OFF!
-```
+| Function | ESP32 Pin |
+|----------|----------|
+| Extend   | GPIO1    |
+| Retract  | GPIO2    |
 
-Note: The color order could be different according to the LED model.
+---
 
-The pixel number indicates the pixel position in the LED strip. For a single LED, use 0.
+## 🔧 Wiring Notes
 
-## Troubleshooting
+### Limit Switches (Normally Open)
 
-* If the LED isn't blinking, check the GPIO or the LED type selection in the `Example Configuration` menu.
+- **C → GND**
+- **NO → GPIO (with internal pull-up enabled)**
 
-For any technical queries, please open an [issue](https://github.com/espressif/esp-idf/issues) on GitHub. We will get back to you soon.
-# soil-sensor-motor-firmware
+Logic:
+- Not pressed → HIGH  
+- Pressed → LOW  
+
+---
+
+### Control Inputs
+
+- Leave GPIO1 and GPIO2 **floating (internal pull-up enabled)**
+- Trigger by **shorting to GND**
+
+---
+
+### Motor Power
+
+- VMOT → External 12V supply  
+- GND → Common ground with ESP32  
+
+⚠️ **Important:** All grounds must be shared.
+
+---
+
+## 🚀 How It Works
+
+### Extend
+- Trigger: GPIO1 pulled LOW  
+- Motor rotates in extend direction  
+- Stops when:
+  - Bottom limit switch is hit  
+  - Or safety condition triggers  
+
+---
+
+### Retract
+- Trigger: GPIO2 pulled LOW  
+- Motor rotates in reverse  
+- Stops when:
+  - Top limit switch is hit  
+
+---
+
+### Driver Behavior
+
+| State        | EN | SLP |
+|--------------|----|-----|
+| Active       | LOW | HIGH |
+| Idle (silent)| HIGH | LOW  |
+
+👉 This removes the **hissing noise** when idle.
+
+---
+
+## 🧠 Software Architecture
+
+- Single FreeRTOS task (`button_task`)
+- Blocking motion loops with periodic yielding:
+  - `esp_rom_delay_us()` → precise stepping
+  - `vTaskDelay()` → watchdog safety
+
+---
+
+## ⏱ Timing
+
+- Step delay: ~1000 µs per half cycle  
+- Periodic yield every ~100 steps  
+- Prevents watchdog resets  
+
+---
+
+## 🛑 Safety Features
+
+- Limit switch enforcement (hardware + software)
+- Immediate stop on limit detection
+- Driver disable after motion
+- Watchdog-safe execution
+
+---
+
+## ⚠️ Important Notes
+
+### 1. GPIO1 / GPIO2
+Some ESP32-C6 boards use these pins for boot or USB.
+
+👉 If unstable, reassign to other GPIOs.
+
+---
+
+### 2. Stepper Direction
+If motion is reversed:
+```c
+gpio_set_level(STEPPER_DIR_GPIO, 1);
