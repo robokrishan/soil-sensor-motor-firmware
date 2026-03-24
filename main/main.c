@@ -56,7 +56,6 @@ typedef enum {
 // --------------------------------------------------
 // Shared state
 // --------------------------------------------------
-// static volatile bool halt = false;
 static volatile bool top_limit_triggered = false;
 static volatile bool bottom_limit_triggered = false;
 static volatile motion_state_t motion_state = MOTION_IDLE;
@@ -73,13 +72,11 @@ static volatile int64_t last_update_us = 0;
 // --------------------------------------------------
 static void IRAM_ATTR top_limit_isr(void *arg)
 {
-    // halt = true;
     top_limit_triggered = true;
 }
 
 static void IRAM_ATTR bottom_limit_isr(void *arg)
 {
-    // halt = true;
     bottom_limit_triggered = true;
 }
 
@@ -253,7 +250,6 @@ static void pwm_command_task(void *arg)
                     motion_state = MOTION_IDLE;
                     sleep_driver();
                 } else {
-                    // halt = false;
                     top_limit_triggered = false;
                     bottom_limit_triggered = false;
                     motion_state = MOTION_RETRACT;
@@ -269,7 +265,6 @@ static void pwm_command_task(void *arg)
                     motion_state = MOTION_IDLE;
                     sleep_driver();
                 } else {
-                    // halt = false;
                     top_limit_triggered = false;
                     bottom_limit_triggered = false;
                     motion_state = MOTION_EXTEND;
